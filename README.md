@@ -14,15 +14,15 @@ First you need to have Apptainer or Singularity installed. If you're running Lin
 
 ## How to build a container
 
-A container needs a definition file, e.g. `conf/umenv_intel.def`. This file lists the operating system, the compilers and the steps to build the libraries. It is a recipe for building the container.
+A container needs a definition file, e.g. `conf/umenv_intel2004.def`. This file lists the operating system, the compilers and the steps to build the libraries. It is a recipe for building the container.
 
 To build the container, type
 ```
-apptainer build umenv_intel2004.sif conf/umenv_intel.def
+apptainer build umenv_intel2004.sif conf/umenv_intel2024.def
 ```
 or, on a local laptop if you encounter the error `FATAL: ...permission denied`,
 ```
-sudo -E apptainer build --force umenv_intel2004.sif conf/umenv_intel.def
+sudo apptainer build --force umenv_intel2004.sif conf/umenv_intel2024.def
 ```
 Now take a cup of coffee.
 
@@ -95,6 +95,42 @@ You will likely need to set up and edit the following files:
  2. ~/.subversion/servers
 Please refer to the Metoffice documentation on how to set these files up.
 
+In addition, you'll need the file `$HOME/.metomi/fcm/keyword.cfg`. An example is 
+```
+# UM repository keywords
+location{primary}[um.x] = https://code.metoffice.gov.uk/svn/um/main
+revision[um.x:vn13.5] = 123226
+location{primary}[um.xm] = https://code.metoffice.gov.uk/svn/um/main
+location{primary}[jules.xm] = https://code.metoffice.gov.uk/svn/jules/main
+location{primary}[socrates.xm] = https://code.metoffice.gov.uk/svn/socrates/main
+location{primary}[casim.xm] = https://code.metoffice.gov.uk/svn/monc/casim
+location{primary}[ukca.xm] = https://code.metoffice.gov.uk/svn/ukca/main
+location{primary}[um_aux.xm] = https://code.metoffice.gov.uk/svn/um/aux
+location{primary}[um_doc.xm] = https://code.metoffice.gov.uk/svn/um/doc
+location{primary}[um_meta.xm] = https://code.metoffice.gov.uk/svn/um/meta
+location{primary}[mule.xm] = https://code.metoffice.gov.uk/svn/um/mule
+location{primary}[moci.xm] = https://code.metoffice.gov.uk/svn/moci/main
+location{primary}[shumlib.xm] = https://code.metoffice.gov.uk/svn/utils/shumlib
+location{primary}[um.offline] = file:///home/pletzera/source/um/offline
+location{primary}[jules.offline] = file:///home/pletzera/source/jules/offline
+location{primary}[socrates.offline] = file:///home/pletzera/source/socrates/offline
+location{primary}[casim.offline] = file:///home/pletzera/source/casim/offline
+location{primary}[ukca.offline] = file:///home/pletzera/source/ukca/offline
+location{primary}[um_aux.offline] = file:///home/pletzera/source/um_aux/offline
+location{primary}[mule.offline] = file:///home/pletzera/source/mule/offline
+location{primary}[shumlib.offline] = file:///home/pletzera/source/shumlib/offline
+location{primary}[lfric_apps.x-tr] = https://code.metoffice.gov.uk/svn/lfric_apps/main/trunk
+location{primary}[lfric_apps.x-br] = https://code.metoffice.gov.uk/svn/lfric_apps/main/branches
+location{primary}[lfric.x-tr] = https://code.metoffice.gov.uk/svn/lfric/LFRic/trunk
+location{primary}[lfric.x-br] = https://code.metoffice.gov.uk/svn/lfric/LFRic/branches
+# NEMO
+location{primary}[nemo] = http://forge.ipsl.jussieu.fr/nemo/svn #/trunk
+location{primary}[nemo.xm] = http://forge.ipsl.jussieu.fr/nemo/svn
+location{primary}[nemo.x] = http://forge.ipsl.jussieu.fr/nemo/svn
+```
+
+Note the entries `.xm` in the above pointing to `https` addresses. In principles, these should point to local mirrors. Using `https` addresses will work while mirrors are being set up, however.
+
 ## Building GCOM
 
 The Unified Model (UM) has additional dependencies, which need to be built as a second step. You will need access to the `code.metoffice.gov.uk` repository.
@@ -108,36 +144,74 @@ git clone git@github.com:pletzer/metomi-vms.git
 cd ~
 bash metomi-vms/usr/local/bin/build-gcom
 ```
-This will install install GCOM under ~/gcom/install
+This will install install GCOM under ~/gcom/install.
 
+## Building a coupled coupled ocean and atmospheric model
 
-## Building and running the atmosphere only
-
-Make sure you have the environment variable `UMDIR`, e.g.
+On Mahuika, you should have a file `$HOME/.cylc/projects` listing the NeSI project number to each experiment and you should have an entry 
 ```
-export UMDIR=/opt/niwa/um_sys/um
+u-di415 <project ID>
 ```
-to point to the location where the input data are stored.
-
-Download the platform configuration
+or alternatively
 ```
-fcm co https://code.metoffice.gov.uk/svn/um/main/branches/dev/andrewpauling/r116716_vn10.7_nesi_apptainer_port
+* <project ID>
 ```
 
-Build GCOM inside the container
+You'll also need to define the `mysrun` command to execute code within the container, e.g. by creating a script named `mysrun` in your `$HOME/bin` directory:
 ```
-Apptainer> build-gcom
+#!/usr/bin/bash
+
+echo "Executing srun apptainer exec /nesi/nobackup/pletzera/umenv_intel2004.sif $@"
+srun apptainer exec /nesi/nobackup/pletzera/umenv_intel2004.sif $@
+```
+The `$HOME/bin/mysrun` should be executable (`chmod +x $HOME/bin/mysrun`) and `$HOME/bin` should be in PATH (`export PATH=$HOME/bin:$PATH`).
+
+Make sure you have
+```
+/opt/nesi/share/etc/set-hpc-project
+export APPTAINERENV_PREPEND_PATH=/opt/nesi/share/bin
+```
+in your `$HOME/.bashrc`.
+
+In your terminal, type
+```
+export CYLC_VERSION=8.1.4
+export UMDIR=/nesi/project/uoo03538/um
+module purge
+module load Apptainer/1.2.5
+apptainer shell /nesi/nobackup/pletzera/umenv_intel2004.sif
 ```
 
-Check out the suite, compile and run it
+You should now land inside the container. Type
 ```
-Apptainer> rosie checkout u-di148
-Apptainer> cd ~/roses/u-di148
+cp /usr/local/XIOS/bin/xios_server.exe $HOME/bin
+source /usr/local/bin/mosrs-setup-gpg-agent
 ```
-Update the `config_root_path` and `um_sources` variables in `$HOME/roses/u-di148/app/fcm_make/rose-app.conf`
- to point to the path of your copy. Then type
+and enter your MetOffice password. Your password has been successfully cached if the follwoing command
 ```
-Apptainer> rose suite-run
+rosie hello
+```
+does not require entering your password and succeeds.
+
+If for any reasons you need to re-cache your password, do
+```
+unset GPG_AGENT_INFO
+rm ~/.gnupg/S.gpg-agent
+ps -fu $USER | grep gpg
+```
+The `ps` command will display all the processes associated with `gpg`. Write down the process ID number that caches the password and kill it (`kill <pid>`).
+
+To start the compilation and executiuon of the coupled model
+```
+rosie co u-di415
+cd ~/roses/u-di415
+cylc vip
+```
+Note: the `project ID` should match the one listed in `$HOME/.cylc/projects` for this experiment (see above).
+
+You can monitor the progress of the compilation and execution by typing
+```
+cylc tui u-di415
 ```
 
 ## How to compile an application using the containerised environment
@@ -204,7 +278,7 @@ ml Apptainer
 module load intel        # load the Intel MPI
 export I_MPI_FABRICS=ofi # turn off shm to run on multiple nodes
 
-srun apptainer exec -B /opt/slurm/lib64/ umenv_intel2004.sif ./myapp
+srun apptainer exec umenv_intel2004.sif ./myapp
 EOF
 sbatch myapp.sl
 ```
